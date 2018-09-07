@@ -83,6 +83,9 @@ def parse_tfrecord_fn (params):
         return image, parsed['label']
     return parse_tfrecord
 
+def im_transform(x):
+    x = tf.image.random_flip_left_right(x)
+    return x
 
 def dataset_input_fn(params, filename, mode, batch_size=32):
     dataset = tf.data.TFRecordDataset(
@@ -90,6 +93,7 @@ def dataset_input_fn(params, filename, mode, batch_size=32):
     dataset = dataset.map(parse_tfrecord_fn(params), num_parallel_calls=params.threads)
     if mode == tf.estimator.ModeKeys.TRAIN:
         dataset = dataset.shuffle(buffer_size=params.shuffle_buffer)
+        dataset = dataset.map(lambda x,y: (im_transform(x),y),num_parallel_calls=params.threads)
         num_epochs = None # indefinitely
     else:
         num_epochs = 1 # end-of-input after this
@@ -171,7 +175,10 @@ def model_fn (features, labels, mode, params):
             labels=labels, predictions=tf.argmax(x,axis=1))
         recall = tf.metrics.recall(labels=labels, predictions=tf.argmax(x,axis=1))
         precision = tf.metrics.precision(labels=labels, predictions=tf.argmax(x,axis=1))
-        metrics = {'accuracy':accuracy, 'recall': recall, 'precision': precision}
+        _,pos_prob = tf.split(y_hat["probabilities"], 2, axis=1)
+        auc = tf.metrics.auc(labels=labels, predictions=pos_prob)
+        if (mode==tf.estimator.ModeKeys.EVAL):
+            metrics = {'val_accuracy':accuracy, 'val_recall': recall, 'val_precision': precision, 'val_auc': auc}
 
 
     # TRAIN only: Learning Rate Policy, Optimizer, Recording Summary
@@ -180,29 +187,27 @@ def model_fn (features, labels, mode, params):
             params.learning_rate,tf.train.get_global_step(),
             decay_steps=100000,decay_rate=0.96)
         optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
+        tf.summary.scalar('learning_rate', learning_rate)
+        tf.summary.scalar('tr_accuracy',accuracy[1])
+        tf.summary.scalar('tr_recall',recall[1])
+        tf.summary.scalar('tr_precision',precision[1])
+        tf.summary.scalar('tr_auc',auc[1])
+        #_, update_op = summary_lib.pr_curve_streaming_op(name='PRC',
+        #                                         predictions=y_hat['classes'],
+        #                                         labels=labels,
+        #                                         num_thresholds=11)
+       # merged_summary = tf.summary.merge_all()
         all_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(all_update_ops):
             train_op = optimizer.minimize(loss=loss,global_step=tf.train.get_global_step())
-        tf.summary.scalar('learning_rate', learning_rate)
-        tf.summary.scalar('accuracy',accuracy[1])
-        tf.summary.scalar('recall',recall[1])
-        tf.summary.scalar('precision',precision[1])
-        #pos,neg = tf.split(y_hat["probabilities"], [1,1], 1)
-        #_, update_op = summary_lib.pr_curve_streaming_op(name='PRC',
-        #                                         predictions=pos,
-        #                                         labels=labels,
-        #                                         num_thresholds=11)
-        #merged_summary = tf.summary.merge_all()
-        #hook = tf_debug.TensorBoardDebugHook("vaibhavs-G20CB:3006")
-        #my_estimator.fit(x=x_data, y=y_data, steps=1000, monitors=[hook])
         return tf.estimator.EstimatorSpec(
-            mode=mode, loss=loss, train_op=train_op)
+            mode=mode, loss=loss, train_op=train_op, predictions=y_hat)
 
     # EVAL Only
 
     if mode == tf.estimator.ModeKeys.EVAL:
         return tf.estimator.EstimatorSpec(
-            mode=mode,loss=loss,eval_metric_ops=metrics)
+            mode=mode,loss=loss,eval_metric_ops=metrics, predictions=y_hat)
 
 
 # Create an estimator that we are going to train and evaluate
@@ -212,6 +217,17 @@ def _train_and_evaluate(params):
             model_dir=params.output_dir,
             params=params,
             config=config)
+    # Creating custom metrics only for hparam tuning purpose
+   #def custom_metric(labels, predictions):
+   #    pred_value = predictions['classes']
+   #    accuracy = tf.metrics.accuracy(
+   #        labels=labels, predictions=pred_value)
+   #    recall = tf.metrics.recall(labels=labels, predictions=pred_value)
+   #    precision = tf.metrics.precision(labels=labels, predictions=pred_value)
+   #    return {'_accuracy': accuracy, '_recall': recall, '_precision': precision}
+
+   # estimator = tf.contrib.estimator.add_metrics(estimator, custom_metric)
+
 
     train_spec = tf.estimator.TrainSpec(
             input_fn = lambda: dataset_input_fn(params,

@@ -1,0 +1,33 @@
+trainingInput:
+  scaleTier: BASIC_GPU
+  hyperparameters:
+    goal: MINIMIZE
+    maxTrials: 32
+    maxParallelTrials: 4
+    hyperparameterMetricTag: val_recall
+    params:
+    - parameterName: hidden_units
+      type: CATEGORICAL
+      categoricalValues: ['64', '32 32']
+    - parameterName: learning_rate
+      type: DOUBLE
+      scaleType: UNIT_REVERSE_LOG_SCALE
+      minValue: 0.0001
+      maxValue: 0.01    
+    - parameterName: pos_weight
+      type: DOUBLE
+      scaleType: UNIT_LINEAR_SCALE
+      minValue: 1.0
+      maxValue: 1.8
+    - parameterName: dropout_rate
+      type: DOUBLE
+      scaleType: UNIT_LINEAR_SCALE
+      minValue: 0.3
+      maxValue: 0.6
+    - parameterName: train_batch_size
+      type: DISCRETE
+      discreteValues:
+      - 8
+      - 16
+      - 32
+        

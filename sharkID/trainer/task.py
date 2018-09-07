@@ -102,6 +102,12 @@ if __name__ == '__main__':
         default = 0.4,
         type = float
     )
+    parser.add_argument(
+        '--is_hp_tuning',
+        help = 'indicate if it is hyperparam tuning run',
+        default = False,
+        type = bool
+    )
     args = parser.parse_args()
     arguments = args.__dict__
 

@@ -1,0 +1,15 @@
+export BUCKET=gcp-demo-acme
+export train_csv=gs://${BUCKET}/catsNDogs/dataset/$1/train_gs.csv
+export validation_csv=gs://${BUCKET}/catsNDogs/dataset/$1/dev_gs.csv
+export output_dir=gs://${BUCKET}/catsNDogs/tfrecords_$1 
+echo "Using $train_csv, $validation_csv"
+echo "Outdir :  $output_dir"
+echo "DOG" > /tmp/labels.txt
+echo "CAT" >> /tmp/labels.txt
+python jpeg_to_tf_record.py \
+       --train_csv $train_csv \
+       --validation_csv $validation_csv \
+       --labels_file /tmp/labels.txt \
+       --project_id cs231n-vaibhavs \
+       --output_dir $output_dir
+
